@@ -9,46 +9,33 @@
 <body>
   <div class="container">
     <h1>Status Monitor</h1>
-    <p class="subtitle">Войди или зарегистрируйся, затем выбери свой статус.</p>
+    <p class="subtitle">Войди через Google и выбери свой статус.</p>
 
     <div id="message" class="message hidden"></div>
 
-    <section id="authSection" class="card auth-grid">
-      <div>
-        <h2>Вход</h2>
-        <form id="loginForm" class="form">
-          <input type="email" id="loginEmail" placeholder="Email" required />
-          <input type="password" id="loginPassword" placeholder="Пароль" required />
-          <button type="submit">Войти</button>
-        </form>
-      </div>
-
-      <div>
-        <h2>Регистрация</h2>
-        <form id="registerForm" class="form">
-          <input type="text" id="registerUsername" placeholder="Имя пользователя" required minlength="2" maxlength="30" />
-          <input type="email" id="registerEmail" placeholder="Email" required />
-          <input type="password" id="registerPassword" placeholder="Пароль" required minlength="6" />
-          <button type="submit">Зарегистрироваться</button>
-        </form>
-      </div>
+    <section id="authSection" class="card auth-box">
+      <h2>Вход</h2>
+      <button id="googleLoginBtn" type="button" class="google-btn">
+        Войти через Google
+      </button>
     </section>
 
     <section id="appSection" class="hidden">
       <div class="card profile-card">
         <div class="profile-top">
-          <div>
-            <h2>Мой профиль</h2>
-            <p id="profileName">...</p>
-            <p id="profileEmail" class="muted">...</p>
+          <div class="profile-main">
+            <img id="profileAvatar" class="profile-avatar" src="" alt="Аватар" />
+            <div>
+              <h2>Мой профиль</h2>
+              <p id="profileName">...</p>
+              <p id="profileEmail" class="muted">...</p>
+            </div>
           </div>
           <button id="logoutBtn" type="button" class="logout-btn">Выйти</button>
         </div>
 
-        <div>
-          <p class="status-label">Выбери статус:</p>
-          <div class="status-buttons" id="statusButtons"></div>
-        </div>
+        <p class="status-label">Выбери статус:</p>
+        <div class="status-buttons" id="statusButtons"></div>
       </div>
 
       <div class="card">
