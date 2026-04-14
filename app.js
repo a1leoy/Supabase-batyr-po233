@@ -314,7 +314,14 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
   if (session) {
     await showLoggedInUI(session);
   } else {
-    showLoggedOutUI();
+    currentUser = null;
+
+    if (channel) {
+      await supabase.removeChannel(channel);
+      channel = null;
+    }
+    authSection?.classList.remove("hidden");
+    appSection?.classList.add("hidden");
   }
 });
 
