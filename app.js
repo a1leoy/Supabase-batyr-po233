@@ -271,9 +271,42 @@ if (loginForm) {
 
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {
-    await supabase.auth.signOut();
-    showLoggedOutUI();
-    showMessage("Вы вышли из аккаунта");
+    try {
+      clearMessage();
+
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.error("Ошибка выхода:", error);
+        showMessage("Ошибка выхода: " + error.message, "error");
+        return;
+      }
+
+      currentUser = null;
+
+      if (channel) {
+        await supabase.removeChannel(channel);
+        channel = null;
+      }
+
+      authSection?.classList.remove("hidden");
+      appSection?.classList.add("hidden");
+
+      if (loginForm) loginForm.reset();
+      if (registerForm) registerForm.reset();
+
+      if (profileName) profileName.textContent = "";
+      if (profileEmail) profileEmail.textContent = "";
+      if (usersList) usersList.innerHTML = "";
+      if (statusButtons) statusButtons.innerHTML = "";
+
+      showMessage("Вы вышли из аккаунта");
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      console.error("Сбой выхода:", err);
+      showMessage("Сбой выхода: " + err.message, "error");
+    }
   });
 }
 
