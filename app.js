@@ -217,26 +217,40 @@ if (loginForm) {
     e.preventDefault();
     clearMessage();
 
-    const email = loginEmail.value.trim();
-    const password = loginPassword.value.trim();
+    try {
+      const email = loginEmail.value.trim();
+      const password = loginPassword.value.trim();
 
-    console.log("Вход нажат");
+      console.log("Вход нажат");
+      console.log("До запроса", email);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+      const result = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-    if (error) {
-      console.error("Ошибка входа:", error);
-      showMessage(error.message, "error");
-      return;
+      console.log("После запроса", result);
+
+      const { data, error } = result;
+
+      if (error) {
+        console.error("Ошибка входа:", error);
+        showMessage("Ошибка входа: " + error.message, "error");
+        return;
+      }
+
+      if (!data?.session) {
+        showMessage("Сессия не создана", "error");
+        return;
+      }
+
+      showMessage("Вход выполнен");
+      loginForm.reset();
+      await renderApp();
+    } catch (err) {
+      console.error("Поймано исключение:", err);
+      showMessage("Сбой: " + err.message, "error");
     }
-
-    console.log("Вход успешен:", data);
-    showMessage("Вход выполнен");
-    loginForm.reset();
-    await renderApp();
   });
 }
 
