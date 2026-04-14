@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-const SUPABASE_URL = "ВСТАВЬ_СЮДА_SUPABASE_URL";
-const SUPABASE_ANON_KEY = "ВСТАВЬ_СЮДА_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://gdnajqgqlxzuburfzgtr.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_w_0fS1tnQZ1hgB8pML0rog_Mx_Ev9Yd";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -291,7 +291,6 @@ logoutBtn.addEventListener("click", async () => {
   showMessage("Вы вышли из аккаунта.");
   await renderApp();
 });
-
 supabase.auth.onAuthStateChange(async () => {
   await renderApp();
 });
