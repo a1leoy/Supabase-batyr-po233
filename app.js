@@ -12,21 +12,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-const loginForm = document.getElementById("loginForm");
-const registerForm = document.getElementById("registerForm");
-
-const loginEmail = document.getElementById("loginEmail");
-const loginPassword = document.getElementById("loginPassword");
-
-const registerUsername = document.getElementById("registerUsername");
-const registerEmail = document.getElementById("registerEmail");
-const registerPassword = document.getElementById("registerPassword");
-
+const googleLoginBtn = document.getElementById("googleLoginBtn");
 const authSection = document.getElementById("authSection");
 const appSection = document.getElementById("appSection");
 
+const profileAvatar = document.getElementById("profileAvatar");
 const profileName = document.getElementById("profileName");
 const profileEmail = document.getElementById("profileEmail");
+
 const usersList = document.getElementById("usersList");
 const statusButtons = document.getElementById("statusButtons");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -59,23 +52,45 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-function showLoggedOutUI() {
-  currentUser = null;
-  authSection?.classList.remove("hidden");
-  appSection?.classList.add("hidden");
+function fallbackAvatar(name = "U") {
+  const first = encodeURIComponent((name || "U").trim().charAt(0).toUpperCase() || "U");
+  return `https://ui-avatars.com/api/?name=${first}&background=1e293b&color=ffffff&size=128`;
 }
 
-async function showLoggedInUI(session) {
-  currentUser = session.user;
-  authSection?.classList.add("hidden");
-  appSection?.classList.remove("hidden");
+function showLoggedOutUI() {
+  currentUser = null;
 
-  if (profileEmail) {
-    profileEmail.textContent = session.user.email ?? "";
+  if (channel) {
+    supabase.removeChannel(channel);
+    channel = null;
   }
 
-  await loadProfiles();
-  subscribeToProfiles();
+  authSection?.classList.remove("hidden");
+  appSection?.classList.add("hidden");
+
+  if (profileAvatar) profileAvatar.src = "";
+  if (profileName) profileName.textContent = "";
+  if (profileEmail) profileEmail.textContent = "";
+  if (usersList) usersList.innerHTML = "";
+  if (statusButtons) statusButtons.innerHTML = "";
+}
+
+async function startGoogleLogin() {
+  clearMessage();
+
+  const redirectTo = window.location.origin + window.location.pathname;
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+    },
+  });
+
+  if (error) {
+    console.error("Ошибка Google входа:", error);
+    showMessage("Ошибка Google входа: " + error.message, "error");
+  }
 }
 
 async function loadProfiles() {
@@ -95,8 +110,14 @@ async function loadProfiles() {
   const me = data.find((p) => p.id === currentUser.id);
 
   if (me) {
-    if (profileName) profileName.textContent = me.username;
-    if (profileEmail) profileEmail.textContent = me.email;
+    if (profileName) profileName.textContent = me.username || "Пользователь";
+    if (profileEmail) profileEmail.textContent = me.email || "";
+    if (profileAvatar) {
+      profileAvatar.src = me.avatar_url || fallbackAvatar(me.username);
+      profileAvatar.onerror = () => {
+        profileAvatar.src = fallbackAvatar(me.username);
+      };
+    }
     renderStatusButtons(me.status);
   }
 
@@ -114,17 +135,26 @@ function renderUsers(profiles) {
   }
 
   usersList.innerHTML = others
-    .map(
-      (user) => `
+    .map((user) => {
+      const avatar = user.avatar_url || fallbackAvatar(user.username);
+      return `
         <div class="user-item">
-          <div class="user-info">
-            <div class="user-name">${escapeHtml(user.username)}</div>
-            <div class="muted">${escapeHtml(user.email)}</div>
+          <div class="user-left">
+            <img
+              class="user-avatar"
+              src="${escapeHtml(avatar)}"
+              alt="avatar"
+              onerror="this.src='${escapeHtml(fallbackAvatar(user.username))}'"
+            />
+            <div class="user-info">
+              <div class="user-name">${escapeHtml(user.username)}</div>
+              <div class="muted">${escapeHtml(user.email)}</div>
+            </div>
           </div>
           <div class="user-status">${escapeHtml(user.status)}</div>
         </div>
-      `
-    )
+      `;
+    })
     .join("");
 }
 
@@ -149,7 +179,7 @@ function renderStatusButtons(activeStatus) {
         .eq("id", currentUser.id);
 
       if (error) {
-        console.error("Ошибка обновления статуса:", error);
+        console.error("Ошибка статуса:", error);
         showMessage("Ошибка статуса: " + error.message, "error");
         return;
       }
@@ -180,13 +210,23 @@ function subscribeToProfiles() {
     .subscribe();
 }
 
+async function showLoggedInUI(session) {
+  currentUser = session.user;
+
+  authSection?.classList.add("hidden");
+  appSection?.classList.remove("hidden");
+
+  await loadProfiles();
+  subscribeToProfiles();
+}
+
 async function bootstrap() {
   clearMessage();
 
   const { data, error } = await supabase.auth.getSession();
 
   if (error) {
-    console.error("Ошибка getSession:", error);
+    console.error("Ошибка сессии:", error);
     showMessage("Ошибка сессии: " + error.message, "error");
     showLoggedOutUI();
     return;
@@ -199,129 +239,29 @@ async function bootstrap() {
   }
 }
 
-if (registerForm) {
-  registerForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    clearMessage();
+googleLoginBtn?.addEventListener("click", startGoogleLogin);
 
-    try {
-      const username = registerUsername.value.trim();
-      const email = registerEmail.value.trim();
-      const password = registerPassword.value.trim();
+logoutBtn?.addEventListener("click", async () => {
+  clearMessage();
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username },
-        },
-      });
+  const { error } = await supabase.auth.signOut();
 
-      if (error) {
-        console.error("Ошибка регистрации:", error);
-        showMessage("Ошибка регистрации: " + error.message, "error");
-        return;
-      }
+  if (error) {
+    console.error("Ошибка выхода:", error);
+    showMessage("Ошибка выхода: " + error.message, "error");
+    return;
+  }
 
-      console.log("Регистрация:", data);
-      showMessage("Регистрация успешна. Теперь войди в аккаунт.");
-      registerForm.reset();
-    } catch (err) {
-      console.error("Сбой регистрации:", err);
-      showMessage("Сбой регистрации: " + err.message, "error");
-    }
-  });
-}
-
-if (loginForm) {
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    clearMessage();
-
-    try {
-      const email = loginEmail.value.trim();
-      const password = loginPassword.value.trim();
-
-      console.log("Вход нажат");
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        console.error("Ошибка входа:", error);
-        showMessage("Ошибка входа: " + error.message, "error");
-        return;
-      }
-
-      console.log("Успешный вход:", data);
-      showMessage("Вход выполнен");
-      loginForm.reset();
-
-      if (data.session) {
-        await showLoggedInUI(data.session);
-      }
-    } catch (err) {
-      console.error("Сбой входа:", err);
-      showMessage("Сбой входа: " + err.message, "error");
-    }
-  });
-}
-
-if (logoutBtn) {
-  logoutBtn.addEventListener("click", async () => {
-    try {
-      clearMessage();
-
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        console.error("Ошибка выхода:", error);
-        showMessage("Ошибка выхода: " + error.message, "error");
-        return;
-      }
-
-      currentUser = null;
-
-      if (channel) {
-        await supabase.removeChannel(channel);
-        channel = null;
-      }
-
-      authSection?.classList.remove("hidden");
-      appSection?.classList.add("hidden");
-
-      if (loginForm) loginForm.reset();
-      if (registerForm) registerForm.reset();
-
-      if (profileName) profileName.textContent = "";
-      if (profileEmail) profileEmail.textContent = "";
-      if (usersList) usersList.innerHTML = "";
-      if (statusButtons) statusButtons.innerHTML = "";
-
-      showMessage("Вы вышли из аккаунта");
-
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err) {
-      console.error("Сбой выхода:", err);
-      showMessage("Сбой выхода: " + err.message, "error");
-    }
-  });
-}
+  showLoggedOutUI();
+  showMessage("Вы вышли из аккаунта");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
 
 supabase.auth.onAuthStateChange(async (_event, session) => {
   if (session) {
     await showLoggedInUI(session);
   } else {
-    currentUser = null;
-
-    if (channel) {
-      await supabase.removeChannel(channel);
-      channel = null;
-    }
-    authSection?.classList.remove("hidden");
-    appSection?.classList.add("hidden");
+    showLoggedOutUI();
   }
 });
 
