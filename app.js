@@ -5,33 +5,40 @@ const SUPABASE_ANON_KEY = "sb_publishable_w_0fS1tnQZ1hgB8pML0rog_Mx_Ev9Yd";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const STATUSES = ["учусь", "кофе", "в игре", "дома"];
-const REDIRECT_URL = window.location.origin + window.location.pathname;
+const loginForm = document.getElementById("loginForm");
+const registerForm = document.getElementById("registerForm");
+
+const loginEmail = document.getElementById("loginEmail");
+const loginPassword = document.getElementById("loginPassword");
+
+const registerUsername = document.getElementById("registerUsername");
+const registerEmail = document.getElementById("registerEmail");
+const registerPassword = document.getElementById("registerPassword");
 
 const authSection = document.getElementById("authSection");
 const appSection = document.getElementById("appSection");
-const usersList = document.getElementById("usersList");
-const statusButtons = document.getElementById("statusButtons");
-const messageBox = document.getElementById("message");
-
 const profileName = document.getElementById("profileName");
 const profileEmail = document.getElementById("profileEmail");
-
-const loginForm = document.getElementById("loginForm");
-const registerForm = document.getElementById("registerForm");
+const usersList = document.getElementById("usersList");
+const statusButtons = document.getElementById("statusButtons");
 const logoutBtn = document.getElementById("logoutBtn");
+const messageBox = document.getElementById("message");
+
+const STATUSES = ["учусь", "кофе", "в игре", "дома"];
 
 let currentUser = null;
 let currentProfile = null;
-let profilesChannel = null;
+let channel = null;
 
 function showMessage(text, type = "success") {
+  if (!messageBox) return;
   messageBox.textContent = text;
   messageBox.className = `message ${type}`;
   messageBox.classList.remove("hidden");
 }
 
 function clearMessage() {
+  if (!messageBox) return;
   messageBox.textContent = "";
   messageBox.className = "message hidden";
 }
@@ -45,86 +52,34 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-async function ensureProfile(user, preferredUsername = "") {
-  const { data: existing, error: selectError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (selectError) {
-    console.error(selectError);
-    return null;
-  }
-
-  if (existing) return existing;
-
-  const fallbackUsername =
-    preferredUsername?.trim() ||
-    user.user_metadata?.username ||
-    user.email?.split("@")[0] ||
-    "Пользователь";
-
-  const newProfile = {
-    id: user.id,
-    email: user.email,
-    username: fallbackUsername,
-    status: "учусь",
-    updated_at: new Date().toISOString()
-  };
-
+async function loadProfiles() {
   const { data, error } = await supabase
     .from("profiles")
-    .insert(newProfile)
-    .select()
-    .single();
+    .select("*")
+    .order("updated_at", { ascending: false });
 
   if (error) {
-    console.error(error);
-    showMessage("Не удалось создать профиль.", "error");
-    return null;
-  }
-
-  return data;
-}
-
-function renderStatusButtons(activeStatus) {
-  statusButtons.innerHTML = "";
-
-  STATUSES.forEach((status) => {
-    const btn = document.createElement("button");
-    btn.textContent = status;
-    btn.className = `status-btn ${activeStatus === status ? "active" : ""}`;
-    btn.addEventListener("click", async () => {
-      await updateStatus(status);
-    });
-    statusButtons.appendChild(btn);
-  });
-}
-
-async function updateStatus(status) {
-  if (!currentUser) return;
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      status,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", currentUser.id);
-
-  if (error) {
-    console.error(error);
-    showMessage("Не удалось обновить статус.", "error");
+    console.error("Ошибка загрузки profiles:", error);
+    showMessage(error.message, "error");
     return;
   }
 
-  currentProfile.status = status;
-  renderStatusButtons(status);
-  showMessage("Статус обновлен.");
+  if (!data) return;
+
+  currentProfile = data.find((p) => p.id === currentUser.id) || null;
+
+  if (currentProfile) {
+    if (profileName) profileName.textContent = currentProfile.username;
+    if (profileEmail) profileEmail.textContent = currentProfile.email;
+    renderStatusButtons(currentProfile.status);
+  }
+
+  renderUsers(data);
 }
 
 function renderUsers(profiles) {
+  if (!usersList) return;
+
   const others = profiles.filter((p) => p.id !== currentUser.id);
 
   if (!others.length) {
@@ -133,8 +88,8 @@ function renderUsers(profiles) {
   }
 
   usersList.innerHTML = others
-    .map((user) => {
-      return `
+    .map(
+      (user) => `
         <div class="user-item">
           <div class="user-info">
             <div class="user-name">${escapeHtml(user.username)}</div>
@@ -142,51 +97,55 @@ function renderUsers(profiles) {
           </div>
           <div class="user-status">${escapeHtml(user.status)}</div>
         </div>
-      `;
-    })
+      `
+    )
     .join("");
 }
 
-async function loadProfiles() {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .order("updated_at", { ascending: false });
+function renderStatusButtons(activeStatus) {
+  if (!statusButtons) return;
 
-  if (error) {
-    console.error(error);
-    showMessage("Не удалось загрузить пользователей.", "error");
-    return;
-  }
+  statusButtons.innerHTML = "";
 
-  currentProfile = data.find((p) => p.id === currentUser.id) || null;
+  STATUSES.forEach((status) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = status;
+    btn.className = `status-btn ${status === activeStatus ? "active" : ""}`;
 
-  if (!currentProfile) {
-    currentProfile = await ensureProfile(currentUser);
-    if (!currentProfile) return;
-    return loadProfiles();
-  }
+    btn.addEventListener("click", async () => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", currentUser.id);
 
-  profileName.textContent = currentProfile.username;
-  profileEmail.textContent = currentProfile.email;
-  renderStatusButtons(currentProfile.status);
-  renderUsers(data);
+      if (error) {
+        console.error("Ошибка обновления статуса:", error);
+        showMessage(error.message, "error");
+        return;
+      }
+
+      showMessage("Статус обновлен");
+      await loadProfiles();
+    });
+
+    statusButtons.appendChild(btn);
+  });
 }
 
 function subscribeToProfiles() {
-  if (profilesChannel) {
-    supabase.removeChannel(profilesChannel);
+  if (channel) {
+    supabase.removeChannel(channel);
   }
 
-  profilesChannel = supabase
-    .channel("profiles-changes")
+  channel = supabase
+    .channel("profiles-live")
     .on(
       "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "profiles"
-      },
+      { event: "*", schema: "public", table: "profiles" },
       async () => {
         if (currentUser) {
           await loadProfiles();
@@ -197,100 +156,98 @@ function subscribeToProfiles() {
 }
 
 async function renderApp() {
-  clearMessage();
-
   const { data, error } = await supabase.auth.getSession();
 
   if (error) {
-    console.error(error);
-    showMessage("Ошибка получения сессии.", "error");
-    return;
-  }
-
-  const session = data.session;
-
-  if (!session) {
-    currentUser = null;
-    currentProfile = null;
-    authSection.classList.remove("hidden");
-    appSection.classList.add("hidden");
-    return;
-  }
-
-  currentUser = session.user;
-  authSection.classList.add("hidden");
-  appSection.classList.remove("hidden");
-
-  await ensureProfile(currentUser);
-  await loadProfiles();
-  subscribeToProfiles();
-}
-
-registerForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  clearMessage();
-
-  const username = document.getElementById("registerUsername").value.trim();
-  const email = document.getElementById("registerEmail").value.trim();
-  const password = document.getElementById("registerPassword").value;
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: REDIRECT_URL,
-      data: {
-        username
-      }
-    }
-  });
-
-  if (error) {
-    console.error(error);
+    console.error("Ошибка сессии:", error);
     showMessage(error.message, "error");
     return;
   }
 
-  if (data.session) {
-    await ensureProfile(data.user, username);
-    showMessage("Регистрация успешна.");
-    registerForm.reset();
-    await renderApp();
-  } else {
-    showMessage("Аккаунт создан. Подтверди email и затем войди.", "success");
-    registerForm.reset();
-  }
-});
-
-loginForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  clearMessage();
-
-  const email = document.getElementById("loginEmail").value.trim();
-  const password = document.getElementById("loginPassword").value;
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  });
-
-  if (error) {
-    console.error(error);
-    showMessage("Неверный email или пароль.", "error");
+  if (!data.session) {
+    currentUser = null;
+    currentProfile = null;
+    if (authSection) authSection.classList.remove("hidden");
+    if (appSection) appSection.classList.add("hidden");
     return;
   }
 
-  await ensureProfile(data.user);
-  showMessage("Вход выполнен.");
-  loginForm.reset();
-  await renderApp();
-});
+  currentUser = data.session.user;
 
-logoutBtn.addEventListener("click", async () => {
-  await supabase.auth.signOut();
-  showMessage("Вы вышли из аккаунта.");
-  await renderApp();
-});
+  if (authSection) authSection.classList.add("hidden");
+  if (appSection) appSection.classList.remove("hidden");
+
+  await loadProfiles();
+  subscribeToProfiles();
+}
+
+if (registerForm) {
+  registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearMessage();
+
+    const username = registerUsername.value.trim();
+    const email = registerEmail.value.trim();
+    const password = registerPassword.value.trim();
+
+    console.log("Регистрация нажата");
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username }
+      }
+    });
+
+    if (error) {
+      console.error("Ошибка регистрации:", error);
+      showMessage(error.message, "error");
+      return;
+    }
+
+    console.log("Регистрация успешна:", data);
+    showMessage("Регистрация успешна, теперь войди в аккаунт.");
+    registerForm.reset();
+  });
+}
+
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearMessage();
+
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value.trim();
+
+    console.log("Вход нажат");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      console.error("Ошибка входа:", error);
+      showMessage(error.message, "error");
+      return;
+    }
+
+    console.log("Вход успешен:", data);
+    showMessage("Вход выполнен");
+    loginForm.reset();
+    await renderApp();
+  });
+}
+
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    await supabase.auth.signOut();
+    showMessage("Вы вышли из аккаунта");
+    await renderApp();
+  });
+}
+
 supabase.auth.onAuthStateChange(async () => {
   await renderApp();
 });
