@@ -3,7 +3,14 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = "https://gdnajqgqlxzuburfzgtr.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_w_0fS1tnQZ1hgB8pML0rog_Mx_Ev9Yd";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+  },
+});
 
 const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
@@ -17,6 +24,7 @@ const registerPassword = document.getElementById("registerPassword");
 
 const authSection = document.getElementById("authSection");
 const appSection = document.getElementById("appSection");
+
 const profileName = document.getElementById("profileName");
 const profileEmail = document.getElementById("profileEmail");
 const usersList = document.getElementById("usersList");
@@ -27,7 +35,6 @@ const messageBox = document.getElementById("message");
 const STATUSES = ["учусь", "кофе", "в игре", "дома"];
 
 let currentUser = null;
-let currentProfile = null;
 let channel = null;
 
 function showMessage(text, type = "success") {
@@ -52,7 +59,28 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function showLoggedOutUI() {
+  currentUser = null;
+  authSection?.classList.remove("hidden");
+  appSection?.classList.add("hidden");
+}
+
+async function showLoggedInUI(session) {
+  currentUser = session.user;
+  authSection?.classList.add("hidden");
+  appSection?.classList.remove("hidden");
+
+  if (profileEmail) {
+    profileEmail.textContent = session.user.email ?? "";
+  }
+
+  await loadProfiles();
+  subscribeToProfiles();
+}
+
 async function loadProfiles() {
+  if (!currentUser) return;
+
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
@@ -60,25 +88,23 @@ async function loadProfiles() {
 
   if (error) {
     console.error("Ошибка загрузки profiles:", error);
-    showMessage(error.message, "error");
+    showMessage("Ошибка загрузки профилей: " + error.message, "error");
     return;
   }
 
-  if (!data) return;
+  const me = data.find((p) => p.id === currentUser.id);
 
-  currentProfile = data.find((p) => p.id === currentUser.id) || null;
-
-  if (currentProfile) {
-    if (profileName) profileName.textContent = currentProfile.username;
-    if (profileEmail) profileEmail.textContent = currentProfile.email;
-    renderStatusButtons(currentProfile.status);
+  if (me) {
+    if (profileName) profileName.textContent = me.username;
+    if (profileEmail) profileEmail.textContent = me.email;
+    renderStatusButtons(me.status);
   }
 
   renderUsers(data);
 }
 
 function renderUsers(profiles) {
-  if (!usersList) return;
+  if (!usersList || !currentUser) return;
 
   const others = profiles.filter((p) => p.id !== currentUser.id);
 
@@ -103,7 +129,7 @@ function renderUsers(profiles) {
 }
 
 function renderStatusButtons(activeStatus) {
-  if (!statusButtons) return;
+  if (!statusButtons || !currentUser) return;
 
   statusButtons.innerHTML = "";
 
@@ -118,17 +144,16 @@ function renderStatusButtons(activeStatus) {
         .from("profiles")
         .update({
           status,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", currentUser.id);
 
       if (error) {
         console.error("Ошибка обновления статуса:", error);
-        showMessage(error.message, "error");
+        showMessage("Ошибка статуса: " + error.message, "error");
         return;
       }
 
-      showMessage("Статус обновлен");
       await loadProfiles();
     });
 
@@ -155,30 +180,23 @@ function subscribeToProfiles() {
     .subscribe();
 }
 
-async function renderApp() {
+async function bootstrap() {
+  clearMessage();
+
   const { data, error } = await supabase.auth.getSession();
 
   if (error) {
-    console.error("Ошибка сессии:", error);
-    showMessage(error.message, "error");
+    console.error("Ошибка getSession:", error);
+    showMessage("Ошибка сессии: " + error.message, "error");
+    showLoggedOutUI();
     return;
   }
 
-  if (!data.session) {
-    currentUser = null;
-    currentProfile = null;
-    if (authSection) authSection.classList.remove("hidden");
-    if (appSection) appSection.classList.add("hidden");
-    return;
+  if (data.session) {
+    await showLoggedInUI(data.session);
+  } else {
+    showLoggedOutUI();
   }
-
-  currentUser = data.session.user;
-
-  if (authSection) authSection.classList.add("hidden");
-  if (appSection) appSection.classList.remove("hidden");
-
-  await loadProfiles();
-  subscribeToProfiles();
 }
 
 if (registerForm) {
@@ -186,29 +204,32 @@ if (registerForm) {
     e.preventDefault();
     clearMessage();
 
-    const username = registerUsername.value.trim();
-    const email = registerEmail.value.trim();
-    const password = registerPassword.value.trim();
+    try {
+      const username = registerUsername.value.trim();
+      const email = registerEmail.value.trim();
+      const password = registerPassword.value.trim();
 
-    console.log("Регистрация нажата");
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username },
+        },
+      });
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { username }
+      if (error) {
+        console.error("Ошибка регистрации:", error);
+        showMessage("Ошибка регистрации: " + error.message, "error");
+        return;
       }
-    });
 
-    if (error) {
-      console.error("Ошибка регистрации:", error);
-      showMessage(error.message, "error");
-      return;
+      console.log("Регистрация:", data);
+      showMessage("Регистрация успешна. Теперь войди в аккаунт.");
+      registerForm.reset();
+    } catch (err) {
+      console.error("Сбой регистрации:", err);
+      showMessage("Сбой регистрации: " + err.message, "error");
     }
-
-    console.log("Регистрация успешна:", data);
-    showMessage("Регистрация успешна, теперь войди в аккаунт.");
-    registerForm.reset();
   });
 }
 
@@ -222,16 +243,11 @@ if (loginForm) {
       const password = loginPassword.value.trim();
 
       console.log("Вход нажат");
-      console.log("До запроса", email);
 
-      const result = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
-
-      console.log("После запроса", result);
-
-      const { data, error } = result;
 
       if (error) {
         console.error("Ошибка входа:", error);
@@ -239,17 +255,16 @@ if (loginForm) {
         return;
       }
 
-      if (!data?.session) {
-        showMessage("Сессия не создана", "error");
-        return;
-      }
-
+      console.log("Успешный вход:", data);
       showMessage("Вход выполнен");
       loginForm.reset();
-      await renderApp();
+
+      if (data.session) {
+        await showLoggedInUI(data.session);
+      }
     } catch (err) {
-      console.error("Поймано исключение:", err);
-      showMessage("Сбой: " + err.message, "error");
+      console.error("Сбой входа:", err);
+      showMessage("Сбой входа: " + err.message, "error");
     }
   });
 }
@@ -257,13 +272,17 @@ if (loginForm) {
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {
     await supabase.auth.signOut();
+    showLoggedOutUI();
     showMessage("Вы вышли из аккаунта");
-    await renderApp();
   });
 }
 
-supabase.auth.onAuthStateChange(async () => {
-  await renderApp();
+supabase.auth.onAuthStateChange(async (_event, session) => {
+  if (session) {
+    await showLoggedInUI(session);
+  } else {
+    showLoggedOutUI();
+  }
 });
 
-await renderApp();
+await bootstrap();
