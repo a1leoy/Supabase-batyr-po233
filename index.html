@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Status Monitor</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Status Monitor</h1>
+    <p class="subtitle">Войди или зарегистрируйся, затем выбери свой статус.</p>
+
+    <div id="message" class="message hidden"></div>
+
+    <section id="authSection" class="card auth-grid">
+      <div>
+        <h2>Вход</h2>
+        <form id="loginForm" class="form">
+          <input type="email" id="loginEmail" placeholder="Email" required />
+          <input type="password" id="loginPassword" placeholder="Пароль" required />
+          <button type="submit">Войти</button>
+        </form>
+      </div>
+
+      <div>
+        <h2>Регистрация</h2>
+        <form id="registerForm" class="form">
+          <input type="text" id="registerUsername" placeholder="Имя пользователя" required minlength="2" maxlength="30" />
+          <input type="email" id="registerEmail" placeholder="Email" required />
+          <input type="password" id="registerPassword" placeholder="Пароль" required minlength="6" />
+          <button type="submit">Зарегистрироваться</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="appSection" class="hidden">
+      <div class="card profile-card">
+        <div class="profile-top">
+          <div>
+            <h2>Мой профиль</h2>
+            <p id="profileName">...</p>
+            <p id="profileEmail" class="muted">...</p>
+          </div>
+          <button id="logoutBtn" class="logout-btn">Выйти</button>
+        </div>
+
+        <div>
+          <p class="status-label">Выбери статус:</p>
+          <div class="status-buttons" id="statusButtons"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Остальные пользователи</h2>
+        <div id="usersList" class="users-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
